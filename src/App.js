@@ -542,6 +542,7 @@ function MessagesPage({user,messages,setMessages,mob}){
         <div style={{display:"flex",flexDirection:"column",gap:1}}>
           {threads.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textMuted}}>Nėra žinučių</div>
           :threads.map(m=>{
+            // eslint-disable-next-line no-unused-vars
             const otherId=m.fromId===user.id?m.toId:m.fromId;
             const otherName=m.fromId===user.id?m.toName||m.fromName:m.fromName;
             const hasUnread=messages.some(x=>x.listingId===m.listingId&&x.toId===user.id&&!x.read);
