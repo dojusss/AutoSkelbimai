@@ -1,10 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL,
-  process.env.REACT_APP_SUPABASE_ANON_KEY
-);
 const C = {
   bg:"#F5F6FA", surface:"#FFFFFF", surfaceAlt:"#F0F2F8", border:"#E2E6F0",
   text:"#111827", textSub:"#6B7280", textMuted:"#9CA3AF",
@@ -260,19 +255,11 @@ function AuthModal({mode:init,onClose,onAuth,mob}){
   const[form,setForm]=useState({name:"",email:"",password:"",phone:""});
   const[err,setErr]=useState("");
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
-  const submit=async()=>{
+  const submit=()=>{
     if(!form.email||!form.password){setErr("Užpildykite visus privalomus laukus.");return;}
     if(mode==="register"&&!form.name){setErr("Įveskite vardą.");return;}
     if(form.password.length<6){setErr("Slaptažodis — mažiausiai 6 simboliai.");return;}
-    if(mode==="register"){
-      const{error}=await supabase.auth.signUp({email:form.email,password:form.password});
-      if(error){setErr(error.message);return;}
-      setErr("✅ Patikrinkite el. paštą ir patvirtinkite registraciją!");
-    } else {
-      const{error}=await supabase.auth.signInWithPassword({email:form.email,password:form.password});
-      if(error){setErr("Neteisingas el. paštas arba slaptažodis.");return;}
-      onClose();
-    }
+    onAuth({id:"u1",name:form.name||form.email.split("@")[0],email:form.email,phone:form.phone,joined:"2025-01-15",rating:5.0,sales:0});
   };
   const overlayStyle=mob?S.overlay:S.overlayD;
   const panelStyle=mob?{...S.modal(true),maxHeight:"85vh"}:{...S.modal(false),maxWidth:420,padding:"32px 28px",borderRadius:18};
@@ -555,7 +542,6 @@ function MessagesPage({user,messages,setMessages,mob}){
         <div style={{display:"flex",flexDirection:"column",gap:1}}>
           {threads.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textMuted}}>Nėra žinučių</div>
           :threads.map(m=>{
-            // eslint-disable-next-line no-unused-vars
             const otherId=m.fromId===user.id?m.toId:m.fromId;
             const otherName=m.fromId===user.id?m.toName||m.fromName:m.fromName;
             const hasUnread=messages.some(x=>x.listingId===m.listingId&&x.toId===user.id&&!x.read);
@@ -651,34 +637,14 @@ function SavedPage({savedIds,all,onOpen,onUnsave,mob}){
 
 // ─── ADD / EDIT MODAL ─────────────────────────────────────────────────────────
 function AddModal({onClose,onAdd,editItem,user,mob}){
-  const[form,setForm]=useState(editItem||{category:"cars",make:"",model:"",year:"",price:"",mileage:"",fuel:"",transmission:"",city:"",description:"",color:"",engine:"",power:"",imageFile:null});
+  const[form,setForm]=useState(editItem||{category:"cars",make:"",model:"",year:"",price:"",mileage:"",fuel:"",transmission:"",city:"",description:"",color:"",engine:"",power:""});
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const defs=CAT_FILTERS[form.category]||[];
   const opts=k=>defs.find(d=>d.key===k)?.options||[];
-  const submit=async()=>{
+  const submit=()=>{
     if(!form.make||!form.model||!form.price) return;
-    let imageUrl = CATEGORIES.find(c=>c.id===form.category)?.icon||"🚗";
-    if(form.imageFile){
-      const fileExt=form.imageFile.name.split('.').pop();
-      const fileName=`${Date.now()}.${fileExt}`;
-      const{error:upErr}=await supabase.storage.from('images').upload(fileName,form.imageFile);
-      if(!upErr) imageUrl=supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
-    }
-    const newListing={
-      category:form.category,make:form.make,model:form.model,
-      year:+form.year,price:+form.price,mileage:+form.mileage,
-      fuel:form.fuel,transmission:form.transmission,body:form.body,
-      city:form.city,color:form.color,engine:form.engine,
-      power:+form.power,description:form.description,
-      image:imageUrl,user_id:user.id,phone:user.phone||""
-    };
-    if(editItem?.dbId){
-      await supabase.from('listings').update(newListing).eq('id',editItem.dbId);
-    } else {
-      await supabase.from('listings').insert([newListing]);
-    }
+    onAdd({...(editItem||{}),id:editItem?.id||Date.now(),...form,year:+form.year,price:+form.price,mileage:+form.mileage,power:+form.power,image:CATEGORIES.find(c=>c.id===form.category)?.icon||"🚗",featured:editItem?.featured||false,views:editItem?.views||0,posted:editItem?.posted||new Date().toISOString().slice(0,10),sellerId:user.id,seller:user.name,sellerRating:user.rating||5.0,sellerSales:user.sales||0,phone:user.phone||""});
     onClose();
-    window.location.reload();
   };
   const Inp=({k,label,placeholder,type="text"})=><div><label style={S.fLab}>{label}</label><input style={S.fInp} type={type} placeholder={placeholder} value={form[k]||""} onChange={e=>set(k,e.target.value)}/></div>;
   const Sel=({k,label,os})=><div><label style={S.fLab}>{label}</label><select style={S.fSel} value={form[k]||""} onChange={e=>set(k,e.target.value)}><option value="">—</option>{os.map(x=><option key={x}>{x}</option>)}</select></div>;
@@ -696,11 +662,6 @@ function AddModal({onClose,onAdd,editItem,user,mob}){
           <div style={S.fg2}><Inp k="mileage" label="Rida (km)" placeholder="80000" type="number"/><Inp k="engine" label="Variklis (l)" placeholder="2.0"/></div>
           <div style={S.fg2}>{opts("fuel").length>0&&<Sel k="fuel" label="Kuras" os={opts("fuel")}/>}{opts("transmission").length>0&&<Sel k="transmission" label="Pavarų dėžė" os={opts("transmission")}/>}</div>
           <div style={S.fg2}>{opts("body").length>0&&<Sel k="body" label="Kėbulo tipas" os={opts("body")}/>}<Sel k="city" label="Miestas" os={CITIES}/></div>
-          <div style={S.fRow}>
-  <label style={S.fLab}>📸 Nuotraukos</label>
-  <input type="file" accept="image/*" multiple style={{...S.fInp,padding:"8px"}}
-    onChange={e=>set("imageFile",e.target.files[0])}/>
-</div>
           <div style={S.fRow}><label style={S.fLab}>Aprašymas</label><textarea style={S.fTA} placeholder="Aprašykite..." value={form.description||""} onChange={e=>set("description",e.target.value)}/></div>
           <div style={{display:"flex",gap:10}}>
             <button onClick={onClose} style={{...S.btnO("md",mob),flex:1,padding:"13px",borderRadius:12}}>Atšaukti</button>
@@ -769,8 +730,7 @@ function ComparePanel({ids,all,onRemove,onClear,mob}){
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App(){
   const mob=useIsMobile();
-  const[listings,setListings]=useState([]);
-  const[loading,setLoading]=useState(true);
+  const[listings,setListings]=useState(SAMPLE_LISTINGS);
   const[messages,setMessages]=useState(SAMPLE_MESSAGES);
   const[selected,setSelected]=useState(null);
   const[showAdd,setShowAdd]=useState(false);
@@ -788,45 +748,6 @@ export default function App(){
   const[compareIds,setCompareIds]=useState([]);
   const[recentIds,setRecentIds]=useState([]);
   const[showFilters,setShowFilters]=useState(false);
-  // Kraunami skelbimai iš Supabase
-const fetchListings = async () => {
-  const { data, error } = await supabase
-    .from('listings')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (!error && data) setListings(data);
-  setLoading(false);
-};
-
-useEffect(()=>{
-  fetchListings();
-},[]);
-
-// Realus prisijungimas per Supabase
-useEffect(()=>{
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    if(session?.user) setUser({
-      id: session.user.id,
-      name: session.user.email.split("@")[0],
-      email: session.user.email,
-      phone: "",
-      rating: 5.0,
-      sales: 0
-    });
-  });
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    if(session?.user) setUser({
-      id: session.user.id,
-      name: session.user.email.split("@")[0],
-      email: session.user.email,
-      phone: "",
-      rating: 5.0,
-      sales: 0
-    });
-    else setUser(null);
-  });
-  return () => subscription.unsubscribe();
-},[]);
 
   const openAuth=(m="login")=>{setAuthMode(m);setShowAuth(true);};
   const handleAuth=u=>{setUser(u);setShowAuth(false);};
@@ -838,8 +759,9 @@ useEffect(()=>{
     setListings(ls=>ls.map(l=>l.id===item.id?{...l,views:l.views+1}:l));
   };
   const handleDelete=id=>setListings(ls=>ls.filter(l=>l.id!==id));
-  const handleAdd=async()=>{
-    await fetchListings();
+  const handleAdd=item=>{
+    if(editItem){setListings(ls=>ls.map(l=>l.id===item.id?item:l));}
+    else{setListings(ls=>[item,...ls]);}
     setEditItem(null);
   };
 
