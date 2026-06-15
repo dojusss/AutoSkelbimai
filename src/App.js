@@ -1,5 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
+import { createClient } from '@supabase/supabase-js';
 
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_ANON_KEY
+);
 const C = {
   bg:"#F5F6FA", surface:"#FFFFFF", surfaceAlt:"#F0F2F8", border:"#E2E6F0",
   text:"#111827", textSub:"#6B7280", textMuted:"#9CA3AF",
@@ -255,11 +260,19 @@ function AuthModal({mode:init,onClose,onAuth,mob}){
   const[form,setForm]=useState({name:"",email:"",password:"",phone:""});
   const[err,setErr]=useState("");
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
-  const submit=()=>{
+  const submit=async()=>{
     if(!form.email||!form.password){setErr("Užpildykite visus privalomus laukus.");return;}
     if(mode==="register"&&!form.name){setErr("Įveskite vardą.");return;}
     if(form.password.length<6){setErr("Slaptažodis — mažiausiai 6 simboliai.");return;}
-    onAuth({id:"u1",name:form.name||form.email.split("@")[0],email:form.email,phone:form.phone,joined:"2025-01-15",rating:5.0,sales:0});
+    if(mode==="register"){
+      const{error}=await supabase.auth.signUp({email:form.email,password:form.password});
+      if(error){setErr(error.message);return;}
+      setErr("✅ Patikrinkite el. paštą ir patvirtinkite registraciją!");
+    } else {
+      const{error}=await supabase.auth.signInWithPassword({email:form.email,password:form.password});
+      if(error){setErr("Neteisingas el. paštas arba slaptažodis.");return;}
+      onClose();
+    }
   };
   const overlayStyle=mob?S.overlay:S.overlayD;
   const panelStyle=mob?{...S.modal(true),maxHeight:"85vh"}:{...S.modal(false),maxWidth:420,padding:"32px 28px",borderRadius:18};
@@ -731,7 +744,8 @@ function ComparePanel({ids,all,onRemove,onClear,mob}){
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App(){
   const mob=useIsMobile();
-  const[listings,setListings]=useState(SAMPLE_LISTINGS);
+  const[listings,setListings]=useState([]);
+  const[loading,setLoading]=useState(true);
   const[messages,setMessages]=useState(SAMPLE_MESSAGES);
   const[selected,setSelected]=useState(null);
   const[showAdd,setShowAdd]=useState(false);
@@ -749,6 +763,44 @@ export default function App(){
   const[compareIds,setCompareIds]=useState([]);
   const[recentIds,setRecentIds]=useState([]);
   const[showFilters,setShowFilters]=useState(false);
+  // Kraunami skelbimai iš Supabase
+useEffect(()=>{
+  const fetchListings = async () => {
+    const { data, error } = await supabase
+      .from('listings')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (!error && data) setListings(data);
+    setLoading(false);
+  };
+  fetchListings();
+},[]);
+
+// Realus prisijungimas per Supabase
+useEffect(()=>{
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if(session?.user) setUser({
+      id: session.user.id,
+      name: session.user.email.split("@")[0],
+      email: session.user.email,
+      phone: "",
+      rating: 5.0,
+      sales: 0
+    });
+  });
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    if(session?.user) setUser({
+      id: session.user.id,
+      name: session.user.email.split("@")[0],
+      email: session.user.email,
+      phone: "",
+      rating: 5.0,
+      sales: 0
+    });
+    else setUser(null);
+  });
+  return () => subscription.unsubscribe();
+},[]);
 
   const openAuth=(m="login")=>{setAuthMode(m);setShowAuth(true);};
   const handleAuth=u=>{setUser(u);setShowAuth(false);};
