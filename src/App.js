@@ -651,14 +651,34 @@ function SavedPage({savedIds,all,onOpen,onUnsave,mob}){
 
 // ─── ADD / EDIT MODAL ─────────────────────────────────────────────────────────
 function AddModal({onClose,onAdd,editItem,user,mob}){
-  const[form,setForm]=useState(editItem||{category:"cars",make:"",model:"",year:"",price:"",mileage:"",fuel:"",transmission:"",city:"",description:"",color:"",engine:"",power:""});
+  const[form,setForm]=useState(editItem||{category:"cars",make:"",model:"",year:"",price:"",mileage:"",fuel:"",transmission:"",city:"",description:"",color:"",engine:"",power:"",imageFile:null});
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const defs=CAT_FILTERS[form.category]||[];
   const opts=k=>defs.find(d=>d.key===k)?.options||[];
-  const submit=()=>{
+  const submit=async()=>{
     if(!form.make||!form.model||!form.price) return;
-    onAdd({...(editItem||{}),id:editItem?.id||Date.now(),...form,year:+form.year,price:+form.price,mileage:+form.mileage,power:+form.power,image:CATEGORIES.find(c=>c.id===form.category)?.icon||"🚗",featured:editItem?.featured||false,views:editItem?.views||0,posted:editItem?.posted||new Date().toISOString().slice(0,10),sellerId:user.id,seller:user.name,sellerRating:user.rating||5.0,sellerSales:user.sales||0,phone:user.phone||""});
+    let imageUrl = CATEGORIES.find(c=>c.id===form.category)?.icon||"🚗";
+    if(form.imageFile){
+      const fileExt=form.imageFile.name.split('.').pop();
+      const fileName=`${Date.now()}.${fileExt}`;
+      const{error:upErr}=await supabase.storage.from('images').upload(fileName,form.imageFile);
+      if(!upErr) imageUrl=supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
+    }
+    const newListing={
+      category:form.category,make:form.make,model:form.model,
+      year:+form.year,price:+form.price,mileage:+form.mileage,
+      fuel:form.fuel,transmission:form.transmission,body:form.body,
+      city:form.city,color:form.color,engine:form.engine,
+      power:+form.power,description:form.description,
+      image:imageUrl,user_id:user.id,phone:user.phone||""
+    };
+    if(editItem?.dbId){
+      await supabase.from('listings').update(newListing).eq('id',editItem.dbId);
+    } else {
+      await supabase.from('listings').insert([newListing]);
+    }
     onClose();
+    window.location.reload();
   };
   const Inp=({k,label,placeholder,type="text"})=><div><label style={S.fLab}>{label}</label><input style={S.fInp} type={type} placeholder={placeholder} value={form[k]||""} onChange={e=>set(k,e.target.value)}/></div>;
   const Sel=({k,label,os})=><div><label style={S.fLab}>{label}</label><select style={S.fSel} value={form[k]||""} onChange={e=>set(k,e.target.value)}><option value="">—</option>{os.map(x=><option key={x}>{x}</option>)}</select></div>;
@@ -676,6 +696,11 @@ function AddModal({onClose,onAdd,editItem,user,mob}){
           <div style={S.fg2}><Inp k="mileage" label="Rida (km)" placeholder="80000" type="number"/><Inp k="engine" label="Variklis (l)" placeholder="2.0"/></div>
           <div style={S.fg2}>{opts("fuel").length>0&&<Sel k="fuel" label="Kuras" os={opts("fuel")}/>}{opts("transmission").length>0&&<Sel k="transmission" label="Pavarų dėžė" os={opts("transmission")}/>}</div>
           <div style={S.fg2}>{opts("body").length>0&&<Sel k="body" label="Kėbulo tipas" os={opts("body")}/>}<Sel k="city" label="Miestas" os={CITIES}/></div>
+          <div style={S.fRow}>
+  <label style={S.fLab}>📸 Nuotraukos</label>
+  <input type="file" accept="image/*" multiple style={{...S.fInp,padding:"8px"}}
+    onChange={e=>set("imageFile",e.target.files[0])}/>
+</div>
           <div style={S.fRow}><label style={S.fLab}>Aprašymas</label><textarea style={S.fTA} placeholder="Aprašykite..." value={form.description||""} onChange={e=>set("description",e.target.value)}/></div>
           <div style={{display:"flex",gap:10}}>
             <button onClick={onClose} style={{...S.btnO("md",mob),flex:1,padding:"13px",borderRadius:12}}>Atšaukti</button>
@@ -764,15 +789,16 @@ export default function App(){
   const[recentIds,setRecentIds]=useState([]);
   const[showFilters,setShowFilters]=useState(false);
   // Kraunami skelbimai iš Supabase
+const fetchListings = async () => {
+  const { data, error } = await supabase
+    .from('listings')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (!error && data) setListings(data);
+  setLoading(false);
+};
+
 useEffect(()=>{
-  const fetchListings = async () => {
-    const { data, error } = await supabase
-      .from('listings')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (!error && data) setListings(data);
-    setLoading(false);
-  };
   fetchListings();
 },[]);
 
@@ -812,9 +838,8 @@ useEffect(()=>{
     setListings(ls=>ls.map(l=>l.id===item.id?{...l,views:l.views+1}:l));
   };
   const handleDelete=id=>setListings(ls=>ls.filter(l=>l.id!==id));
-  const handleAdd=item=>{
-    if(editItem){setListings(ls=>ls.map(l=>l.id===item.id?item:l));}
-    else{setListings(ls=>[item,...ls]);}
+  const handleAdd=async()=>{
+    await fetchListings();
     setEditItem(null);
   };
 
