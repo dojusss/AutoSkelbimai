@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
+import { createClient } from '@supabase/supabase-js';
+const supabase = createClient(process.env.REACT_APP_SUPABASE_URL, process.env.REACT_APP_SUPABASE_ANON_KEY);
 
 const C = {
   bg:"#F5F6FA", surface:"#FFFFFF", surfaceAlt:"#F0F2F8", border:"#E2E6F0",
@@ -299,7 +301,10 @@ function ListingCard({item,onClick,saved,onSave,compared,onCompare,user,onRequir
   return(
     <div style={S.card(hov)} onClick={()=>onClick(item)} onMouseEnter={()=>!mob&&setHov(true)} onMouseLeave={()=>!mob&&setHov(false)}>
       <div style={S.cardImg(mob)}>
-        <span>{item.image}</span>
+        {item.image&&item.image.startsWith('http')
+  ?<img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+  :<span>{item.image}</span>
+}
         {item.featured&&<div style={S.cardFeat(mob)}>⭐ REKOMENDUOJAMAS</div>}
         {!showActions&&<button style={{position:"absolute",top:6,right:6,background:saved?"#FEE2E2":"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:mob?30:32,height:mob?30:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:mob?14:16,boxShadow:C.shadow}} onClick={e=>{e.stopPropagation();if(!user){onRequireAuth();return;}onSave(item.id);}}>
           {saved?"❤️":"🤍"}
@@ -427,7 +432,10 @@ function DetailModal({item,onClose,user,onRequireAuth,saved,onSave,all,onOpenSel
     <div style={mob?S.overlay:S.overlayD} onClick={onClose}>
       <div style={S.modal(mob)} onClick={e=>e.stopPropagation()}>
         <div style={S.modalImg(mob)}>
-          <span>{item.image}</span>
+          {item.image&&item.image.startsWith('http')
+  ?<img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+  :<span>{item.image}</span>
+}
           {item.featured&&<div style={{...S.cardFeat(mob),top:12,left:12}}>⭐ REKOMENDUOJAMAS</div>}
           <button onClick={onClose} style={{position:"absolute",top:10,right:10,background:"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:16,color:C.textSub}}>✕</button>
           <button onClick={()=>{if(!user){onClose();onRequireAuth();return;}onSave(item.id);}} style={{position:"absolute",top:10,right:52,background:saved?"#FEE2E2":"rgba(255,255,255,0.9)",border:"none",borderRadius:"50%",width:34,height:34,cursor:"pointer",fontSize:18}}>
@@ -438,9 +446,9 @@ function DetailModal({item,onClose,user,onRequireAuth,saved,onSave,all,onOpenSel
           <div style={{fontWeight:800,fontSize:mob?19:22,color:C.text,marginBottom:2}}>{item.make} {item.model} {item.year}</div>
           <div style={{color:C.textMuted,fontSize:12,marginBottom:8}}>📍 {item.city} · {timeAgo(item.posted)} · 👁 {item.views}</div>
           <div onClick={()=>onOpenSeller(item)} style={{background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 12px",fontSize:12,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,marginBottom:12}}>
-            <div style={{width:20,height:20,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.accent}}>{item.seller.charAt(0)}</div>
-            <span style={{fontWeight:600,color:C.text}}>{item.seller}</span>
-            <span style={{color:C.featured}}>{stars(item.sellerRating)}</span>
+            <div style={{width:20,height:20,borderRadius:"50%",background:C.accentLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:C.accent}}>{item.seller||"Pardavėjas"?.charAt(0) || "P"}</div>
+            <span style={{fontWeight:600,color:C.text}}>{item.seller||"Pardavėjas"}</span>
+            <span style={{color:C.featured}}>{stars(item.sellerRating||5)}</span>
           </div>
           <div style={{color:C.accent,fontWeight:900,fontSize:mob?24:30,marginBottom:14}}>{fmtEur(item.price)}</div>
           <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:14,overflowX:"auto"}}>
@@ -662,6 +670,10 @@ function AddModal({onClose,onAdd,editItem,user,mob}){
           <div style={S.fg2}><Inp k="mileage" label="Rida (km)" placeholder="80000" type="number"/><Inp k="engine" label="Variklis (l)" placeholder="2.0"/></div>
           <div style={S.fg2}>{opts("fuel").length>0&&<Sel k="fuel" label="Kuras" os={opts("fuel")}/>}{opts("transmission").length>0&&<Sel k="transmission" label="Pavarų dėžė" os={opts("transmission")}/>}</div>
           <div style={S.fg2}>{opts("body").length>0&&<Sel k="body" label="Kėbulo tipas" os={opts("body")}/>}<Sel k="city" label="Miestas" os={CITIES}/></div>
+          <div style={S.fRow}>
+  <label style={S.fLab}>📸 Nuotrauka</label>
+  <input type="file" accept="image/*" style={{...S.fInp,padding:"8px"}} onChange={e=>set("imageFile",e.target.files[0])}/>
+</div>
           <div style={S.fRow}><label style={S.fLab}>Aprašymas</label><textarea style={S.fTA} placeholder="Aprašykite..." value={form.description||""} onChange={e=>set("description",e.target.value)}/></div>
           <div style={{display:"flex",gap:10}}>
             <button onClick={onClose} style={{...S.btnO("md",mob),flex:1,padding:"13px",borderRadius:12}}>Atšaukti</button>
@@ -730,7 +742,8 @@ function ComparePanel({ids,all,onRemove,onClear,mob}){
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App(){
   const mob=useIsMobile();
-  const[listings,setListings]=useState(SAMPLE_LISTINGS);
+  const[listings,setListings]=useState([]);
+  const[loading,setLoading]=useState(true);
   const[messages,setMessages]=useState(SAMPLE_MESSAGES);
   const[selected,setSelected]=useState(null);
   const[showAdd,setShowAdd]=useState(false);
@@ -748,7 +761,9 @@ export default function App(){
   const[compareIds,setCompareIds]=useState([]);
   const[recentIds,setRecentIds]=useState([]);
   const[showFilters,setShowFilters]=useState(false);
-
+const fetchListings=async()=>{const{data,error}=await supabase.from('listings').select('*').order('created_at',{ascending:false});if(!error&&data)setListings(data);setLoading(false);};
+useEffect(()=>{fetchListings();},[]);
+useEffect(()=>{supabase.auth.getSession().then(({data:{session}})=>{if(session?.user)setUser({id:session.user.id,name:session.user.email.split("@")[0],email:session.user.email,phone:"",rating:5.0,sales:0});});const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{if(session?.user)setUser({id:session.user.id,name:session.user.email.split("@")[0],email:session.user.email,phone:"",rating:5.0,sales:0});else setUser(null);});return()=>subscription.unsubscribe();},[]);
   const openAuth=(m="login")=>{setAuthMode(m);setShowAuth(true);};
   const handleAuth=u=>{setUser(u);setShowAuth(false);};
   const toggleSave=id=>setSaved(s=>s.includes(id)?s.filter(x=>x!==id):[id,...s]);
