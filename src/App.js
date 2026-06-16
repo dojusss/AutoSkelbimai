@@ -649,11 +649,25 @@ function AddModal({onClose,onAdd,editItem,user,mob}){
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const defs=CAT_FILTERS[form.category]||[];
   const opts=k=>defs.find(d=>d.key===k)?.options||[];
-  const submit=()=>{
+  const submit=async()=>{
     if(!form.make||!form.model||!form.price) return;
-    onAdd({...(editItem||{}),id:editItem?.id||Date.now(),...form,year:+form.year,price:+form.price,mileage:+form.mileage,power:+form.power,image:CATEGORIES.find(c=>c.id===form.category)?.icon||"🚗",featured:editItem?.featured||false,views:editItem?.views||0,posted:editItem?.posted||new Date().toISOString().slice(0,10),sellerId:user.id,seller:user.name,sellerRating:user.rating||5.0,sellerSales:user.sales||0,phone:user.phone||""});
+    let imageUrl=CATEGORIES.find(c=>c.id===form.category)?.icon||"🚗";
+    if(form.imageFiles&&form.imageFiles.length>0){
+      const urls=[];
+      for(const file of form.imageFiles){
+        const fileExt=file.name.split('.').pop();
+        const fileName=`${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const{error:upErr}=await supabase.storage.from('images').upload(fileName,file);
+        if(!upErr) urls.push(supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl);
+      }
+      if(urls.length>0) imageUrl=urls[0];
+    }
+    const newListing={category:form.category,make:form.make,model:form.model,year:+form.year,price:+form.price,mileage:+form.mileage,fuel:form.fuel,transmission:form.transmission,body:form.body,city:form.city,color:form.color,engine:form.engine,power:+form.power,description:form.description,image:imageUrl,user_id:user.id,phone:user.phone||""};
+    if(editItem?.id){await supabase.from('listings').update(newListing).eq('id',editItem.id);}
+    else{await supabase.from('listings').insert([newListing]);}
     onClose();
-  };
+    window.location.reload();
+  }
   const Inp=({k,label,placeholder,type="text"})=><div><label style={S.fLab}>{label}</label><input style={S.fInp} type={type} placeholder={placeholder} value={form[k]||""} onChange={e=>set(k,e.target.value)}/></div>;
   const Sel=({k,label,os})=><div><label style={S.fLab}>{label}</label><select style={S.fSel} value={form[k]||""} onChange={e=>set(k,e.target.value)}><option value="">—</option>{os.map(x=><option key={x}>{x}</option>)}</select></div>;
   return(
@@ -672,7 +686,7 @@ function AddModal({onClose,onAdd,editItem,user,mob}){
           <div style={S.fg2}>{opts("body").length>0&&<Sel k="body" label="Kėbulo tipas" os={opts("body")}/>}<Sel k="city" label="Miestas" os={CITIES}/></div>
           <div style={S.fRow}>
   <label style={S.fLab}>📸 Nuotrauka</label>
-  <input type="file" accept="image/*" style={{...S.fInp,padding:"8px"}} onChange={e=>set("imageFile",e.target.files[0])}/>
+  <input type="file" accept="image/*" multiple style={{...S.fInp,padding:"8px"}} onChange={e=>set("imageFiles",Array.from(e.target.files))}/>
 </div>
           <div style={S.fRow}><label style={S.fLab}>Aprašymas</label><textarea style={S.fTA} placeholder="Aprašykite..." value={form.description||""} onChange={e=>set("description",e.target.value)}/></div>
           <div style={{display:"flex",gap:10}}>
